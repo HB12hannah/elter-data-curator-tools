@@ -18,12 +18,6 @@ The [USAGE.md](./USAGE.md) document provides examples of queries that use `curl`
 to create table-based reports. It also offers tips on authenticating with
 session cookies or DAR access tokens.
 
-[elter-dar-query.sh](./elter-dar-query.sh) is a small script to query
-unpublished draft datasets using the DAR API. It has to be fed by a list
-of draft dataset IDs in a file called `eLTER-Data-Call-2025-Uploads.md`
-stored next to the script. Currently you have to edit the script to
-adjust the json fields to query.
-
 [elter-dar-query.sh](./elter-dar-query.sh) is a short script that queries
 unpublished draft records using the DAR API. It requires a list of
 draft dataset IDs in a file called `eLTER-Data-Call-2025-Uploads.md`,

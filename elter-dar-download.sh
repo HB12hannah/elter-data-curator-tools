@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-######################## KONFIGURATION ########################################
-# Einzelne IDs hier eintragen und --single Flag nutzen
-# Kommentar entfernen um IDs zu aktivieren:
+######################## CONFIGURATION ########################################
+# Enter individual IDs here and use the --single flag
+# Remove the comment markers to activate IDs:
 #SINGLE_IDS=(
   #"xpwd0-rxm33"
   # "00512-sfy70"
@@ -28,7 +28,7 @@ done
 ######################## 1) Parse CLI arguments ################################
 APIKEY=""
 DATASETID=""
-EXISTING_ACTION=""
+EXISTING_ACTION="skip" #skip or overwrite
 DOWNLOAD_ALL=true
 DOWNLOAD_SINGLE=false
 
@@ -54,7 +54,7 @@ for arg in "$@"; do
   esac
 done
 
-# Token aus Datei lesen falls kein --apikey angegeben
+# Read token from file if no --apikey was given
 if [[ -z $APIKEY ]]; then
   APIKEY=$(grep -Ev "^\s*(#|$)" "${BASE_DIR}/.elter-dar-access-token" | head -n1)
 fi
@@ -64,18 +64,18 @@ if [[ -n $EXISTING_ACTION && $EXISTING_ACTION != "skip" && $EXISTING_ACTION != "
   exit 1
 fi
 
-######################## 2) IDs sammeln ########################################
+######################## 2) Collect IDs ########################################
 if [[ $DOWNLOAD_ALL == true ]]; then
   mapfile -t DATASET_IDS < <(grep -Ev "^\s*(#|$)" "${IDS_FILE}")
-  echo "Modus: ALLE — ${#DATASET_IDS[@]} IDs aus ${IDS_FILE}"
+  echo "Mode: ALL — ${#DATASET_IDS[@]} IDs from ${IDS_FILE}"
 
 elif [[ $DOWNLOAD_SINGLE == true ]]; then
   DATASET_IDS=("${SINGLE_IDS[@]}")
-  echo "Modus: SINGLE — ${#DATASET_IDS[@]} IDs aus SINGLE_IDS Liste"
+  echo "Mode: SINGLE — ${#DATASET_IDS[@]} IDs from SINGLE_IDS list"
 
 elif [[ -n $DATASETID ]]; then
   DATASET_IDS=("$DATASETID")
-  echo "Modus: EINZELN — ${DATASETID}"
+  echo "Mode: SINGLE ID — ${DATASETID}"
 
 else
   show_help
@@ -84,7 +84,7 @@ fi
 
 TOTAL=${#DATASET_IDS[@]}
 
-######################## 3) Download Funktion ##################################
+######################## 3) Download function ##################################
 download_file() {
   local url=$1
   local name=$2
@@ -101,7 +101,7 @@ download_file() {
 
 export -f download_file
 
-######################## 4) Loop über alle IDs #################################
+######################## 4) Loop over all IDs #################################
 COUNT=0
 DOWNLOADED=0
 SKIPPED=0
@@ -110,7 +110,7 @@ FAILED=0
 for DATASETID in "${DATASET_IDS[@]}"; do
   COUNT=$((COUNT + 1))
 
-  # Site-Name vom DAR holen
+  # Get site name from DAR
   SITE_NAME=$(curl -fsSL \
     -H "Authorization: Bearer ${APIKEY}" \
     "https://dar.elter-ri.eu/api/datasets/${DATASETID}/draft" | \
@@ -133,47 +133,47 @@ for DATASETID in "${DATASET_IDS[@]}"; do
 
   echo "[${COUNT}/${TOTAL}] Download: ${DATASETID} (${SITE_NAME})"
 
-  # Dateiliste holen
+  # Get file list
   DAR_DRAFT_URL="https://dar.elter-ri.eu/api/datasets/${DATASETID}/draft/files"
   curl_opts=(-fsSL)
   [[ -n $APIKEY ]] && curl_opts+=(-H "Authorization: Bearer $APIKEY")
 
   json=$(curl "${curl_opts[@]}" "$DAR_DRAFT_URL") || {
-    echo "  FEHLER: Metadaten nicht abrufbar für ${DATASETID}" >&2
+    echo "  ERROR: could not fetch metadata for ${DATASETID}" >&2
     FAILED=$((FAILED + 1))
     continue
   }
 
   file_count=$(jq '.entries | length' <<<"$json")
   if [[ $file_count -eq 0 ]]; then
-    echo "  Keine Dateien gefunden für ${DATASETID}"
+    echo "  No files found fo ${DATASETID}"
     FAILED=$((FAILED + 1))
     continue
   fi
 
-  echo "  ${file_count} Datei(en) gefunden – starte parallelen Download"
+  echo "  ${file_count} file(s) found – starting parallel download"
   mkdir -p "$TARGET_DIR"
 
-  # Paralleler Download
+  # Parallel download
   (
     cd "$TARGET_DIR"
     jq -j '.entries[] | .links.content, "\u0000", .key, "\u0000"' <<<"$json" |
       xargs -0 -P"$(nproc)" -n2 bash -c 'download_file "$1" "$2" "'"$APIKEY"'"' _
   )
 
-  # Rekursiv ZIPs entpacken
+  # Recursively extract ZIPs
   find "$TARGET_DIR" -name "*.zip" | while read -r inner_zip; do
-    echo "  Entpacke: $(basename ${inner_zip})"
+    echo "  Extracting: $(basename ${inner_zip})"
     unzip -q "${inner_zip}" -d "${inner_zip%.*}"
     rm "${inner_zip}"
   done
 
-  echo "[${COUNT}/${TOTAL}] ✓ Fertig: ${DATASETID}"
+  echo "[${COUNT}/${TOTAL}] ✓ Done: ${DATASETID}"
   DOWNLOADED=$((DOWNLOADED + 1))
 
 done
 
-######################## 5) Zusammenfassung ####################################
+######################## 5) Summary ####################################
 echo ""
 echo "================================"
 echo "Download summary"
